@@ -23,7 +23,7 @@
  * questions.
  */
 
-package java.util.regex;
+package com.github.spullara.java.util.regex;
 
 /**
  * The result of a match operation.

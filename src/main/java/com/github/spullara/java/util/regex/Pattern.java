@@ -23,15 +23,17 @@
  * questions.
  */
 
-package java.util.regex;
+package com.github.spullara.java.util.regex;
 
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.text.CharacterIterator;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Arrays;
+import java.util.List;
 
 
 /**
@@ -4775,9 +4777,37 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
      */
     private static CharProperty union(final CharProperty lhs,
                                       final CharProperty rhs) {
-        return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    return lhs.isSatisfiedBy(ch) || rhs.isSatisfiedBy(ch);}};
+        if (lhs instanceof UnionCharProperty) {
+            ((UnionCharProperty) lhs).add(rhs);
+            return lhs;
+        }
+        return new UnionCharProperty(lhs, rhs);
+    }
+
+    private static class UnionCharProperty extends CharProperty {
+
+        CharProperty[] cps = new CharProperty[2];
+
+        UnionCharProperty(CharProperty lhs, CharProperty rhs) {
+            cps[0] = lhs;
+            cps[1] = rhs;
+        }
+
+        void add(CharProperty cp) {
+            List<CharProperty> charProperties = new ArrayList<CharProperty>();
+            Collections.addAll(charProperties, cps);
+            charProperties.add(cp);
+            cps = charProperties.toArray(cps);
+        }
+
+        @Override
+        boolean isSatisfiedBy(int ch) {
+            int length = cps.length;
+            for (int i = 0; i < length; i++) {
+                if (cps[i].isSatisfiedBy(ch)) return true;
+            }
+            return false;
+        }
     }
 
     /**
