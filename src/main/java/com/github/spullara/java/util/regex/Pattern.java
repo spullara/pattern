@@ -25,15 +25,8 @@
 
 package com.github.spullara.java.util.regex;
 
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.text.CharacterIterator;
 import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 
 /**
@@ -4786,25 +4779,32 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
 
     private static class UnionCharProperty extends CharProperty {
 
-        CharProperty[] cps = new CharProperty[2];
+        private CharProperty[] cps = null;
+        private final CharProperty lhs;
+        private final CharProperty rhs;
 
         UnionCharProperty(CharProperty lhs, CharProperty rhs) {
-            cps[0] = lhs;
-            cps[1] = rhs;
+            this.lhs = lhs;
+            this.rhs = rhs;
         }
 
         void add(CharProperty cp) {
             List<CharProperty> charProperties = new ArrayList<CharProperty>();
-            Collections.addAll(charProperties, cps);
+            if (cps != null) {
+                Collections.addAll(charProperties, cps);
+            }
             charProperties.add(cp);
-            cps = charProperties.toArray(cps);
+            cps = charProperties.toArray(new CharProperty[charProperties.size()]);
         }
 
         @Override
         boolean isSatisfiedBy(int ch) {
-            int length = cps.length;
-            for (int i = 0; i < length; i++) {
-                if (cps[i].isSatisfiedBy(ch)) return true;
+            if (lhs.isSatisfiedBy(ch) || rhs.isSatisfiedBy(ch)) return true;
+            if (cps != null) {
+                int length = cps.length;
+                for (int i = 0; i < length; i++) {
+                    if (cps[i].isSatisfiedBy(ch)) return true;
+                }
             }
             return false;
         }

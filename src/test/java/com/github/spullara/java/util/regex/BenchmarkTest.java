@@ -1,9 +1,8 @@
 package com.github.spullara.java.util.regex;
 
-import java.security.SecureRandom;
-import java.util.Random;
-
 import org.junit.Test;
+
+import java.util.Random;
 
 import static junit.framework.Assert.assertEquals;
 
@@ -19,14 +18,20 @@ public class BenchmarkTest {
                                                      "\\uff21-\\uff3a\\uff41-\\uff5a" +  // full width Alphabet
                                                      "\\uff66-\\uff9f" +                 // half width Katakana
                                                      "\\uffa1-\\uffdc";                  // half width Hangul (Korean)
-    private static final int TIMES = 10000000;
+    private static final int TIMES = 5000000;
 
     @Test
     public void testSpeed() {
-        int base = test(java.util.regex.Pattern.compile("[a-z]"));
-        assertEquals(base, test(Pattern.compile("[a-z]")));
-        base = test(java.util.regex.Pattern.compile("[" + HASHTAG_ALPHA_CHARS + "]"));
-        assertEquals(base, test(Pattern.compile("[" + HASHTAG_ALPHA_CHARS + "]")));
+        for (int i = 0; i < 3; i++) {
+            System.out.print("Java Ascii: ");
+            int base = test(java.util.regex.Pattern.compile("[a-z]"));
+            System.out.print(" New Ascii: ");
+            assertEquals(base, test(Pattern.compile("[a-z]")));
+            System.out.print("Java Unicode: ");
+            base = test(java.util.regex.Pattern.compile("[" + HASHTAG_ALPHA_CHARS + "]"));
+            System.out.print(" New Unicode: ");
+            assertEquals(base, test(Pattern.compile("[" + HASHTAG_ALPHA_CHARS + "]")));
+        }
     }
 
     private int test(Pattern p) {
