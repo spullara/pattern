@@ -2435,9 +2435,7 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
         } catch (IllegalArgumentException iae) {
             throw error("Unknown character block name {" + name + "}");
         }
-        return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    return block == Character.UnicodeBlock.of(ch);}};
+        return new UnicodeBlockCharProperty(block);
     }
 
     /**
@@ -3344,9 +3342,7 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
     private static abstract class CharProperty extends Node {
         abstract boolean isSatisfiedBy(int ch);
         CharProperty complement() {
-            return new CharProperty() {
-                    boolean isSatisfiedBy(int ch) {
-                        return ! CharProperty.this.isSatisfiedBy(ch);}};
+            return new ComplementCharProperty();
         }
         CharProperty maybeComplement(boolean complement) {
             return complement ? complement() : this;
@@ -3366,6 +3362,11 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
             info.maxLength++;
             return next.study(info);
         }
+
+      private class ComplementCharProperty extends CharProperty {
+        boolean isSatisfiedBy(int ch) {
+            return ! CharProperty.this.isSatisfiedBy(ch);}
+      }
     }
 
     /**
@@ -3628,9 +3629,7 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
      */
     private static CharProperty rangeFor(final int lower,
                                          final int upper) {
-        return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    return inRange(lower, ch, upper);}};
+        return new RangeForCharProperty(lower, upper);
     }
 
     /**
@@ -3640,20 +3639,8 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
     private CharProperty caseInsensitiveRangeFor(final int lower,
                                                  final int upper) {
         if (has(UNICODE_CASE))
-            return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    if (inRange(lower, ch, upper))
-                        return true;
-                    int up = Character.toUpperCase(ch);
-                    return inRange(lower, up, upper) ||
-                           inRange(lower, Character.toLowerCase(up), upper);}};
-        return new CharProperty() {
-            boolean isSatisfiedBy(int ch) {
-                return inRange(lower, ch, upper) ||
-                    ASCII.isAscii(ch) &&
-                        (inRange(lower, ASCII.toUpper(ch), upper) ||
-                         inRange(lower, ASCII.toLower(ch), upper));
-            }};
+            return new UnicodeCaseCharProperty(lower, upper);
+        return new AsciiCaseCharProperty(lower, upper);
     }
 
     /**
@@ -4810,14 +4797,49 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
         }
     }
 
+    private static class IntersectionCharProperty extends CharProperty {
+
+        private CharProperty[] cps = null;
+        private final CharProperty lhs;
+        private final CharProperty rhs;
+
+        IntersectionCharProperty(CharProperty lhs, CharProperty rhs) {
+            this.lhs = lhs;
+            this.rhs = rhs;
+        }
+
+        void add(CharProperty cp) {
+            List<CharProperty> charProperties = new ArrayList<CharProperty>();
+            if (cps != null) {
+                Collections.addAll(charProperties, cps);
+            }
+            charProperties.add(cp);
+            cps = charProperties.toArray(new CharProperty[charProperties.size()]);
+        }
+
+        @Override
+        boolean isSatisfiedBy(int ch) {
+            if (!lhs.isSatisfiedBy(ch) || !rhs.isSatisfiedBy(ch)) return false;
+            if (cps != null) {
+                int length = cps.length;
+                for (int i = 0; i < length; i++) {
+                    if (!cps[i].isSatisfiedBy(ch)) return false;
+                }
+            }
+            return true;
+        }
+    }
+
     /**
      * Returns the set intersection of two CharProperty nodes.
      */
     private static CharProperty intersection(final CharProperty lhs,
                                              final CharProperty rhs) {
-        return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    return lhs.isSatisfiedBy(ch) && rhs.isSatisfiedBy(ch);}};
+        if (lhs instanceof IntersectionCharProperty) {
+            ((IntersectionCharProperty) lhs).add(rhs);
+            return lhs;
+        }
+        return new IntersectionCharProperty(lhs, rhs);
     }
 
     /**
@@ -4825,9 +4847,11 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
      */
     private static CharProperty setDifference(final CharProperty lhs,
                                               final CharProperty rhs) {
-        return new CharProperty() {
-                boolean isSatisfiedBy(int ch) {
-                    return ! rhs.isSatisfiedBy(ch) && lhs.isSatisfiedBy(ch);}};
+        if (lhs instanceof SetDifferenceCharProperty) {
+            ((SetDifferenceCharProperty) lhs).add(rhs);
+            return lhs;
+        }
+        return new SetDifferenceCharProperty(lhs, rhs);
     }
 
     /**
@@ -5288,6 +5312,100 @@ NEXT:       while (i <= last) {
             defClone("javaMirrored", new CloneableProperty() {
                 boolean isSatisfiedBy(int ch) {
                     return Character.isMirrored(ch);}});
+        }
+    }
+
+    private static class SetDifferenceCharProperty extends CharProperty {
+        private final CharProperty rhs;
+        private final CharProperty lhs;
+        private CharProperty[] cps = null;
+
+        public SetDifferenceCharProperty(CharProperty lhs, CharProperty rhs) {
+            this.rhs = rhs;
+            this.lhs = lhs;
+        }
+
+        void add(CharProperty cp) {
+            List<CharProperty> charProperties = new ArrayList<CharProperty>();
+            if (cps != null) {
+                Collections.addAll(charProperties, cps);
+            }
+            charProperties.add(cp);
+            cps = charProperties.toArray(new CharProperty[charProperties.size()]);
+        }
+
+        @Override
+        boolean isSatisfiedBy(int ch) {
+            if (!lhs.isSatisfiedBy(ch)) return false;
+            if (rhs.isSatisfiedBy(ch)) return false;
+            if (cps != null) {
+                int length = cps.length;
+                for (int i = 0; i < length; i++) {
+                    if (cps[i].isSatisfiedBy(ch)) return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    private static class UnicodeBlockCharProperty extends CharProperty {
+        private final Character.UnicodeBlock block;
+
+        public UnicodeBlockCharProperty(Character.UnicodeBlock block) {
+            this.block = block;
+        }
+
+        boolean isSatisfiedBy(int ch) {
+            return block == Character.UnicodeBlock.of(ch);
+        }
+    }
+
+    private static class RangeForCharProperty extends CharProperty {
+        private final int lower;
+        private final int upper;
+
+        public RangeForCharProperty(int lower, int upper) {
+            this.lower = lower;
+            this.upper = upper;
+        }
+
+        boolean isSatisfiedBy(int ch) {
+            return inRange(lower, ch, upper);
+        }
+    }
+
+    private static class UnicodeCaseCharProperty extends CharProperty {
+        private final int lower;
+        private final int upper;
+
+        public UnicodeCaseCharProperty(int lower, int upper) {
+            this.lower = lower;
+            this.upper = upper;
+        }
+
+        boolean isSatisfiedBy(int ch) {
+            if (inRange(lower, ch, upper))
+                return true;
+            int up = Character.toUpperCase(ch);
+            return inRange(lower, up, upper) ||
+                    inRange(lower, Character.toLowerCase(up), upper);
+        }
+    }
+
+    private static class AsciiCaseCharProperty extends CharProperty {
+        private final int lower;
+        private final int upper;
+
+        public AsciiCaseCharProperty(int lower, int upper) {
+            this.lower = lower;
+            this.upper = upper;
+        }
+
+        boolean isSatisfiedBy(int ch) {
+            return inRange(lower, ch, upper) ||
+                    ASCII.isAscii(ch) &&
+                            (inRange(lower, ASCII.toUpper(ch), upper) ||
+                                    inRange(lower, ASCII.toLower(ch), upper));
         }
     }
 }
